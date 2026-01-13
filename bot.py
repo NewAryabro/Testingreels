@@ -1,10 +1,8 @@
 import os
+import asyncio
+import tempfile
 import edge_tts
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup
-)
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -25,20 +23,16 @@ VOICE_MAP = {
 }
 # ----------------------------------------
 
-# ---------------- START ----------------
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    context.user_data.clear()  # only clear on /start
+    context.user_data.clear()
     await update.message.reply_text(
         "🎙️ Reels Voice Bot\n\n"
-        "1️⃣ Text send cheyyi\n"
-        "2️⃣ Voice select cheyyi\n"
-        "3️⃣ Generate press cheyyi"
+        "Send me the text you want to convert to speech 👇\n\n"
+        "Then choose voice → Generate"
     )
 
-# ---------------- TEXT ----------------
 async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # ❌ DO NOT CLEAR context.user_data here
-    context.user_data["text"] = update.message.text
+    context.user_data["text"] = update.message.text.strip()
 
     keyboard = [
         [
@@ -55,87 +49,113 @@ async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        "Options select cheyyi 👇",
+        "Text received!\nNow select voice options:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ---------------- BUTTON HANDLER ----------------
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
 
-    # ---------- Gender ----------
+    # Store selections (they toggle / overwrite)
     if data == "gender_m":
         context.user_data["gender"] = "m"
-        await query.message.reply_text("👨 Male selected")
-        return
-
-    if data == "gender_f":
+    elif data == "gender_f":
         context.user_data["gender"] = "f"
-        await query.message.reply_text("👩 Female selected")
-        return
-
-    # ---------- Language ----------
-    if data == "lang_te":
+    elif data == "lang_te":
         context.user_data["lang"] = "te"
-        await query.message.reply_text("🇮🇳 Telugu selected")
-        return
-
-    if data == "lang_en":
+    elif data == "lang_en":
         context.user_data["lang"] = "en"
-        await query.message.reply_text("🇺🇸 English selected")
+
+    # Show current selection status
+    if data in ("gender_m", "gender_f", "lang_te", "lang_en"):
+        gender = context.user_data.get("gender", "?")
+        lang = context.user_data.get("lang", "?")
+        await query.edit_message_text(
+            f"Current selection:\n"
+            f"Gender: {'Male' if gender == 'm' else 'Female' if gender == 'f' else '—'}\n"
+            f"Language: {'Telugu' if lang == 'te' else 'English' if lang == 'en' else '—'}\n\n"
+            "Choose again or press Generate ↓",
+            reply_markup=query.message.reply_markup
+        )
         return
 
-    # ---------- Generate ----------
+    # ── Generate ──
     if data == "generate":
         text = context.user_data.get("text")
         gender = context.user_data.get("gender")
         lang = context.user_data.get("lang")
 
-        if not text or not gender or not lang:
-            await query.message.reply_text(
-                "❌ Please select Text + Gender + Language first"
-            )
+        if not text:
+            await query.message.reply_text("❌ No text provided")
+            return
+        if not gender or not lang:
+            await query.message.reply_text("❌ Please select both Gender and Language")
             return
 
-        voice = VOICE_MAP[f"{lang}_{gender}"]
+        voice_key = f"{lang}_{gender}"
+        voice = VOICE_MAP.get(voice_key)
 
-        # 🔥 SSML for natural pauses & emotion
-        ssml_text = f"""
-<speak>
-    <prosody rate="85%" pitch="+2Hz">
-        {text.replace("...", "<break time='700ms'/>")}
-    </prosody>
-</speak>
-"""
+        if not voice:
+            await query.message.reply_text(f"❌ Voice not found for {voice_key}")
+            return
 
-        file = "voice.mp3"
-        communicate = edge_tts.Communicate(
-            ssml_text,
-            voice,
-            is_ssml=True
-        )
-        await communicate.save(file)
+        # Show generating message
+        msg = await query.message.reply_text("🎙️ Generating audio... ⏳")
 
-        await query.message.reply_audio(
-            audio=open(file, "rb"),
-            caption="🎧 Ready for reels"
-        )
+        # Create temp file
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
+            audio_path = tmp.name
 
-        os.remove(file)
+        try:
+            communicate = edge_tts.Communicate(
+                text=text,
+                voice=voice,
+                rate="-10%",     # slightly slower – feels more natural for reels
+                pitch="+1Hz"     # very slight lift – sounds clearer
+            )
+
+            await communicate.save(audio_path)
+
+            await msg.edit_text("✅ Audio ready!")
+
+            await query.message.reply_audio(
+                audio=open(audio_path, "rb"),
+                caption=f"Voice: {voice}\nText length: {len(text)} chars",
+                title="Reels Voice",
+                performer="Edge TTS"
+            )
+
+        except edge_tts.exceptions.NoAudioReceived:
+            await msg.edit_text("❌ No audio received from server. Try shorter text or different voice.")
+        except Exception as e:
+            await msg.edit_text(f"❌ Error: {str(e)[:200]}")
+        finally:
+            if os.path.exists(audio_path):
+                try:
+                    os.remove(audio_path)
+                except:
+                    pass
+
+        # Clean user data after success or failure
         context.user_data.clear()
 
-# ---------------- MAIN ----------------
+
 def main():
+    if not TOKEN:
+        print("Error: BOT_TOKEN environment variable not set")
+        return
+
     app = ApplicationBuilder().token(TOKEN).build()
 
-    # ⚠️ ORDER MATTERS
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CallbackQueryHandler(button))  # callback first
+    app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_text))
 
-    app.run_polling()
+    print("Bot is running...")
+    app.run_polling(allowed_updates=Update.ALL_TYPES)
+
 
 if __name__ == "__main__":
     main()
