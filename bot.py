@@ -18,7 +18,7 @@ async def text_to_voice(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_audio(audio=open(file, 'rb'))
     os.remove(file)
 
-app = ApplicationBuilder().token("YOUR_BOT_TOKEN").build()
+app = ApplicationBuilder().token("6214130906:AAEIJXHDUvYjbUVLIBB9FELILdlDergk0a4").build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, text_to_voice))
 
