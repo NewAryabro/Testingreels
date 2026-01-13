@@ -10,69 +10,51 @@ from telegram.ext import (
     filters
 )
 from elevenlabs.client import ElevenLabs
-from elevenlabs import save as eleven_save  # to save the audio stream
+from elevenlabs import save as eleven_save
 
-# ---------------- CONFIG ----------------
+# CONFIG
 TOKEN = os.getenv("BOT_TOKEN")
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")  # Heroku Config Vars lo set chey
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
-# Bunty – Reel Perfect Voice
-BUNTY_VOICE_ID = "FZkK3TvQ0pjyDmT8fzIW"
-
-# ----------------------------------------
+BUNTY_VOICE_ID = "FZkK3TvQ0pjyDmT8fzIW"  # Bunty – Reel Perfect Voice
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "🎙️ Reels King Voice Bot 🔥 (v3 Enhanced!)\n\n"
-        "Send text (mixed Telugu-English ok!)\n"
-        "Select gender + lang → Generate\n\n"
-        "Now using Eleven v3 for super emotional & mixed energy!"
+        "🎙️ Reels King Voice Bot 🔥 (v3 Alpha Enhanced!)\n\n"
+        "Mixed Telugu-English text pampu (tags add cheyochu like [excited])\n"
+        "Gender + Lang select chey → Generate\n\n"
+        "v3 lo super emotional & mixed ravali!"
     )
 
 async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["text"] = update.message.text.strip()
 
     keyboard = [
-        [
-            InlineKeyboardButton("👨 Male", callback_data="gender_m"),
-            InlineKeyboardButton("👩 Female", callback_data="gender_f")
-        ],
-        [
-            InlineKeyboardButton("🇮🇳 Telugu", callback_data="lang_te"),
-            InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
-        ],
-        [
-            InlineKeyboardButton("🎙️ Generate Bunty v3", callback_data="generate")
-        ]
+        [InlineKeyboardButton("👨 Male", callback_data="gender_m"),
+         InlineKeyboardButton("👩 Female", callback_data="gender_f")],
+        [InlineKeyboardButton("🇮🇳 Telugu", callback_data="lang_te"),
+         InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")],
+        [InlineKeyboardButton("🎙️ Generate Bunty v3", callback_data="generate")]
     ]
 
-    await update.message.reply_text(
-        "Text saved! Pick options:",
-        reply_markup=InlineKeyboardMarkup(keyboard)
-    )
+    await update.message.reply_text("Text saved! Options pick chey:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
 
-    if data == "gender_m":
-        context.user_data["gender"] = "m"
-    elif data == "gender_f":
-        context.user_data["gender"] = "f"
-    elif data == "lang_te":
-        context.user_data["lang"] = "te"
-    elif data == "lang_en":
-        context.user_data["lang"] = "en"
+    if data in ["gender_m", "gender_f"]:
+        context.user_data["gender"] = data[-1]
+    elif data in ["lang_te", "lang_en"]:
+        context.user_data["lang"] = data[-2:]
 
-    if data in ("gender_m", "gender_f", "lang_te", "lang_en"):
+    if data.startswith(("gender_", "lang_")):
         gender = context.user_data.get("gender", "?")
         lang = context.user_data.get("lang", "?")
         await query.edit_message_text(
-            f"Selected:\nGender: {'Male 👨' if gender == 'm' else 'Female 👩' if gender == 'f' else '—'}\n"
-            f"Language: {'Telugu 🇮🇳' if lang == 'te' else 'English 🇺🇸' if lang == 'en' else '—'}\n\n"
-            "Change or Generate ↓",
+            f"Selected: Gender {'Male' if gender == 'm' else 'Female' if gender == 'f' else '—'} | Lang {'Telugu' if lang == 'te' else 'English' if lang == 'en' else '—'}\n\nChange or Generate!",
             reply_markup=query.message.reply_markup
         )
         return
@@ -82,16 +64,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         gender = context.user_data.get("gender")
         lang = context.user_data.get("lang")
 
-        if not text:
-            await query.message.reply_text("❌ Text ledu! Pampu first.")
-            return
-        if not gender or not lang:
-            await query.message.reply_text("❌ Gender + Language select chey.")
+        if not text or not gender or not lang:
+            await query.message.reply_text("❌ Text/Gender/Lang complete ga select chey!")
             return
 
         voice_id = BUNTY_VOICE_ID
-
-        msg = await query.message.reply_text("🎙️ Generating Bunty v3 mixed energy... ⏳")
+        msg = await query.message.reply_text("🎙️ Bunty v3 mixed energy generating... ⏳ (alpha model)")
 
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             audio_path = tmp.name
@@ -102,53 +80,46 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             audio_stream = client.text_to_speech.convert(
                 text=text,
                 voice_id=voice_id,
-                model_id="eleven_v3",  # ← v3 (alpha) added! Super mixed & expressive
+                model_id="eleven_v3",  # v3 alpha for mixed & expressive!
                 output_format="mp3_44100_128",
                 voice_settings={
-                    "stability": 0.3,          # Lower for more emotion/variation in mixed text
+                    "stability": 0.3,  # low = more variation/emotion
                     "similarity_boost": 0.9,
-                    "style": 0.8,              # Higher for dramatic reels king vibe
-                    "use_speaker_boost": False  # Not supported in v3, so False
+                    "style": 0.8,      # high = dramatic/reel vibe
+                    "use_speaker_boost": False  # v3 lo not supported
                 }
             )
 
             eleven_save(audio_stream, audio_path)
 
-            await msg.edit_text("✅ Bunty v3 ready! 🔥 Mixed ravali super ga!")
+            await msg.edit_text("✅ Bunty v3 ready! Mixed ravali super 🔥")
 
             lang_name = "Telugu" if lang == "te" else "English"
             await query.message.reply_audio(
                 audio=open(audio_path, "rb"),
-                caption=f"🎧 Bunty – Reel Perfect (v3)\nLang: {lang_name} | Gender: {'Male' if gender == 'm' else 'Female'}\nText: {text[:80]}...\nTry tags like [excited] or [laughs] for more fun!"
+                caption=f"🎧 Bunty v3 (alpha) | Lang: {lang_name} | Gender: {'Male' if gender == 'm' else 'Female'}\nText: {text[:80]}...\nTip: Add [excited], [laughs], [whispers] for more fun!"
             )
 
         except Exception as e:
-            error_msg = str(e)[:150]
-            await msg.edit_text(f"❌ Error: {error_msg}\n(API key/credits/text check chey or v3 alpha kabatti fallback to v2)")
+            await msg.edit_text(f"❌ Error: {str(e)[:150]}\n(v3 alpha kabatti inconsistent undochu → fallback to v2 cheyochu)")
         finally:
             if os.path.exists(audio_path):
                 os.remove(audio_path)
 
         context.user_data.clear()
 
-
 def main():
-    if not TOKEN:
-        print("Error: BOT_TOKEN not set!")
-        return
-    if not ELEVENLABS_API_KEY:
-        print("Error: ELEVENLABS_API_KEY not set!")
+    if not TOKEN or not ELEVENLABS_API_KEY:
+        print("Error: BOT_TOKEN or ELEVENLABS_API_KEY missing!")
         return
 
     app = ApplicationBuilder().token(TOKEN).build()
-
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_text))
 
-    print("Reels King Bot (v3) starting...")
+    print("Reels King Bot (v3 alpha) starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 if __name__ == "__main__":
     main()
