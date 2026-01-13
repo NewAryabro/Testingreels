@@ -14,7 +14,7 @@ from elevenlabs import save as eleven_save  # to save the audio stream
 
 # ---------------- CONFIG ----------------
 TOKEN = os.getenv("BOT_TOKEN")
-ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")  # Get from https://elevenlabs.io → Profile → API Key
+ELEVENLABS_API_KEY = os.getenv("sk_a67a0580b1482c7c5425a788ec8d5a55afb6f46988c1c2a6")  # Get from https://elevenlabs.io → Profile → API Key
 
 # Bunty – Reel Perfect Voice (perfect for reels king energy)
 BUNTY_VOICE_ID = "FZkK3TvQ0pjyDmT8fzIW"
