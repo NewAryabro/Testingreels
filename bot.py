@@ -12,24 +12,21 @@ from telegram.ext import (
 from elevenlabs.client import ElevenLabs
 from elevenlabs import save as eleven_save
 
-# ── CONFIG ────────────────────────────────────────────────────────────────
+# CONFIG
 TOKEN = os.getenv("BOT_TOKEN")
 ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")
 
 BUNTY_VOICE_ID = "FZkK3TvQ0pjyDmT8fzIW"  # Bunty – Reel Perfect Voice
 
-# ── START COMMAND ─────────────────────────────────────────────────────────
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
         "🎙️ Reels King Voice Bot 🔥\n\n"
-        "1. Send the text you want to convert\n"
-        "2. Choose gender + language\n"
-        "3. Press Generate\n\n"
-        "Using Bunty – high energy reel style voice!"
+        "Text pampu (Telugu + English mix ok, [excited] tags add cheyochu)\n"
+        "Gender + Lang select chey → Generate\n\n"
+        "Bunty style lo perfect ravali! (v3 alpha ready)"
     )
 
-# ── TEXT HANDLER ──────────────────────────────────────────────────────────
 async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data["text"] = update.message.text.strip()
 
@@ -48,17 +45,15 @@ async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
 
     await update.message.reply_text(
-        "Text received!\nNow select voice options:",
+        "Text saved! Options pick chey:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# ── BUTTON HANDLER ────────────────────────────────────────────────────────
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     data = query.data
 
-    # Store selections
     if data == "gender_m":
         context.user_data["gender"] = "m"
     elif data == "gender_f":
@@ -68,30 +63,27 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "lang_en":
         context.user_data["lang"] = "en"
 
-    # Update selection message (UX feedback)
-    if data.startswith(("gender_", "lang_")):
+    if data in ("gender_m", "gender_f", "lang_te", "lang_en"):
         gender = context.user_data.get("gender", "?")
         lang = context.user_data.get("lang", "?")
         await query.edit_message_text(
-            f"Current selection:\n"
-            f"Gender: {'Male 👨' if gender == 'm' else 'Female 👩' if gender == 'f' else '—'}\n"
+            f"Selected:\nGender: {'Male 👨' if gender == 'm' else 'Female 👩' if gender == 'f' else '—'}\n"
             f"Language: {'Telugu 🇮🇳' if lang == 'te' else 'English 🇺🇸' if lang == 'en' else '—'}\n\n"
             "Change or press Generate ↓",
             reply_markup=query.message.reply_markup
         )
         return
 
-    # ── GENERATE AUDIO ────────────────────────────────────────────────────
     if data == "generate":
         text = context.user_data.get("text")
         gender = context.user_data.get("gender")
         lang = context.user_data.get("lang")
 
         if not text:
-            await query.message.reply_text("❌ No text provided. Send some first.")
+            await query.message.reply_text("❌ Text ledu bro! Pampu.")
             return
         if not gender or not lang:
-            await query.message.reply_text("❌ Please select both Gender and Language.")
+            await query.message.reply_text("❌ Gender + Language select chey.")
             return
 
         voice_id = BUNTY_VOICE_ID
@@ -106,44 +98,39 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             audio_stream = client.text_to_speech.convert(
                 text=text,
                 voice_id=voice_id,
-                model_id="eleven_multilingual_v2",          # stable & reliable with Bunty
+                model_id="eleven_multilingual_v2",  # Stable & perfect for Bunty/mixed (default)
+                # model_id="eleven_v3",  # v3 alpha – uncomment for more expressive/emotional (may error with Bunty, try simple text)
                 output_format="mp3_44100_128",
                 voice_settings={
                     "stability": 0.45,
                     "similarity_boost": 0.85,
                     "style": 0.65,
-                    "use_speaker_boost": True
+                    "use_speaker_boost": True  # v2 lo ok, v3 lo False chey if uncomment
                 }
             )
 
             eleven_save(audio_stream, audio_path)
 
-            await msg.edit_text("✅ Ready!")
+            await msg.edit_text("✅ Perfect ravali bro! 🔥")
 
             lang_name = "Telugu" if lang == "te" else "English"
             await query.message.reply_audio(
                 audio=open(audio_path, "rb"),
-                caption=(
-                    f"🎧 Bunty – Reel Perfect Voice\n"
-                    f"Lang: {lang_name} | Gender: {'Male' if gender == 'm' else 'Female'}\n"
-                    f"Text: {text[:90]}{'...' if len(text) > 90 else ''}"
-                )
+                caption=f"🎧 Bunty – Reel Perfect\nLang: {lang_name} | Gender: {'Male' if gender == 'm' else 'Female'}\nText: {text[:100]}...\nTip: v3 lo [excited] [laughs] add chey for extra energy!"
             )
 
         except Exception as e:
-            error_text = str(e)
+            error_detail = str(e)
             try:
                 if hasattr(e, 'response') and e.response.json():
-                    error_text += f"\nDetail: {e.response.json()}"
+                    error_detail += f"\nAPI detail: {e.response.json()}"
             except:
                 pass
-
             await msg.edit_text(
-                f"❌ Generation failed\n"
-                f"{error_text[:220]}\n\n"
-                "• Check API key & credits\n"
-                "• Text too long?\n"
-                "• Try shorter text"
+                f"❌ Error: {error_detail[:300]}\n"
+                "• API key/credits check chey\n"
+                "• Text short chey\n"
+                "• v3 uncomment chesthe alpha kabatti fallback v2 ki"
             )
 
         finally:
@@ -155,13 +142,12 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         context.user_data.clear()
 
-# ── MAIN ──────────────────────────────────────────────────────────────────
 def main():
     if not TOKEN:
-        print("Error: BOT_TOKEN not set in environment!")
+        print("Error: BOT_TOKEN not set!")
         return
     if not ELEVENLABS_API_KEY:
-        print("Error: ELEVENLABS_API_KEY not set in environment!")
+        print("Error: ELEVENLABS_API_KEY not set!")
         return
 
     app = ApplicationBuilder().token(TOKEN).build()
@@ -172,7 +158,6 @@ def main():
 
     print("Reels King Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
-
 
 if __name__ == "__main__":
     main()
