@@ -1,7 +1,5 @@
 import os
-import asyncio
 import tempfile
-import edge_tts
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -11,24 +9,31 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+from elevenlabs.client import ElevenLabs
+from elevenlabs import save as eleven_save  # to save the audio stream
 
 # ---------------- CONFIG ----------------
 TOKEN = os.getenv("BOT_TOKEN")
+ELEVENLABS_API_KEY = os.getenv("ELEVENLABS_API_KEY")  # Get from https://elevenlabs.io → Profile → API Key
 
-VOICE_MAP = {
-    "te_m": "te-IN-MohanNeural",
-    "te_f": "te-IN-ShrutiNeural",
-    "en_m": "en-US-GuyNeural",
-    "en_f": "en-US-JennyNeural"
-}
+# Bunty – Reel Perfect Voice (perfect for reels king energy)
+BUNTY_VOICE_ID = "FZkK3TvQ0pjyDmT8fzIW"
+
+# Optional: You can add more voices later, e.g.
+# VOICE_MAP = {
+#     "te_m": BUNTY_VOICE_ID,
+#     "te_f": "some_female_id",
+#     ...
+# }
 # ----------------------------------------
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.clear()
     await update.message.reply_text(
-        "🎙️ Reels Voice Bot\n\n"
-        "Send me the text you want to convert to speech 👇\n\n"
-        "Then choose voice → Generate"
+        "🎙️ Reels King Voice Bot 🔥\n\n"
+        "Send the text you want in Bunty style!\n"
+        "Then select gender + language → Generate\n\n"
+        "(Using ElevenLabs Bunty – Reel Perfect Voice)"
     )
 
 async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -44,12 +49,12 @@ async def get_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("🇺🇸 English", callback_data="lang_en")
         ],
         [
-            InlineKeyboardButton("🎙️ Generate", callback_data="generate")
+            InlineKeyboardButton("🎙️ Generate Bunty Voice", callback_data="generate")
         ]
     ]
 
     await update.message.reply_text(
-        "Text received!\nNow select voice options:",
+        "Text saved! Now pick voice options:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
@@ -58,7 +63,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     data = query.data
 
-    # Store selections (they toggle / overwrite)
+    # Gender & Language selection (stored but Bunty used regardless for now)
     if data == "gender_m":
         context.user_data["gender"] = "m"
     elif data == "gender_f":
@@ -68,69 +73,70 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "lang_en":
         context.user_data["lang"] = "en"
 
-    # Show current selection status
+    # Feedback on selection (optional UX improvement)
     if data in ("gender_m", "gender_f", "lang_te", "lang_en"):
         gender = context.user_data.get("gender", "?")
         lang = context.user_data.get("lang", "?")
         await query.edit_message_text(
-            f"Current selection:\n"
-            f"Gender: {'Male' if gender == 'm' else 'Female' if gender == 'f' else '—'}\n"
-            f"Language: {'Telugu' if lang == 'te' else 'English' if lang == 'en' else '—'}\n\n"
-            "Choose again or press Generate ↓",
+            f"Selected:\nGender: {'Male 👨' if gender == 'm' else 'Female 👩' if gender == 'f' else '—'}\n"
+            f"Language: {'Telugu 🇮🇳' if lang == 'te' else 'English 🇺🇸' if lang == 'en' else '—'}\n\n"
+            "Change or press Generate ↓",
             reply_markup=query.message.reply_markup
         )
         return
 
-    # ── Generate ──
+    # ── GENERATE ──
     if data == "generate":
         text = context.user_data.get("text")
         gender = context.user_data.get("gender")
         lang = context.user_data.get("lang")
 
         if not text:
-            await query.message.reply_text("❌ No text provided")
+            await query.message.reply_text("❌ No text! Send some first.")
             return
         if not gender or not lang:
-            await query.message.reply_text("❌ Please select both Gender and Language")
+            await query.message.reply_text("❌ Select Gender + Language please")
             return
 
-        voice_key = f"{lang}_{gender}"
-        voice = VOICE_MAP.get(voice_key)
+        # For now we use Bunty for everything – best for reels king vibe
+        voice_id = BUNTY_VOICE_ID
 
-        if not voice:
-            await query.message.reply_text(f"❌ Voice not found for {voice_key}")
-            return
+        # Show progress
+        msg = await query.message.reply_text("🎙️ Generating Bunty Reels King voice... ⏳ (ElevenLabs)")
 
-        # Show generating message
-        msg = await query.message.reply_text("🎙️ Generating audio... ⏳")
-
-        # Create temp file
         with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as tmp:
             audio_path = tmp.name
 
         try:
-            communicate = edge_tts.Communicate(
+            client = ElevenLabs(api_key=ELEVENLABS_API_KEY)
+
+            audio_stream = client.text_to_speech.convert(
                 text=text,
-                voice=voice,
-                rate="-10%",     # slightly slower – feels more natural for reels
-                pitch="+1Hz"     # very slight lift – sounds clearer
+                voice_id=voice_id,
+                model_id="eleven_multilingual_v2",  # Great for Hindi/Telugu/English mix
+                output_format="mp3_44100_128",      # Good quality + size
+                voice_settings={
+                    "stability": 0.35,              # Lower = more expressive/emotional
+                    "similarity_boost": 0.9,
+                    "style": 0.75,                  # Higher = more dramatic/reel energy
+                    "use_speaker_boost": True
+                }
             )
 
-            await communicate.save(audio_path)
+            # Save the stream to file
+            eleven_save(audio_stream, audio_path)
 
-            await msg.edit_text("✅ Audio ready!")
+            await msg.edit_text("✅ Bunty style ready! 🚀")
 
+            lang_name = "Telugu" if lang == "te" else "English"
             await query.message.reply_audio(
                 audio=open(audio_path, "rb"),
-                caption=f"Voice: {voice}\nText length: {len(text)} chars",
-                title="Reels Voice",
-                performer="Edge TTS"
+                caption=f"🎧 Bunty – Reel Perfect Voice\nLang: {lang_name} | Gender: {'Male' if gender == 'm' else 'Female'}\nText: {text[:100]}..."
             )
 
-        except edge_tts.exceptions.NoAudioReceived:
-            await msg.edit_text("❌ No audio received from server. Try shorter text or different voice.")
         except Exception as e:
-            await msg.edit_text(f"❌ Error: {str(e)[:200]}")
+            error_msg = str(e)[:150]
+            await msg.edit_text(f"❌ Error generating audio:\n{error_msg}\n(Check API key / credits / text length)")
         finally:
             if os.path.exists(audio_path):
                 try:
@@ -138,13 +144,16 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 except:
                     pass
 
-        # Clean user data after success or failure
+        # Reset for next use
         context.user_data.clear()
 
 
 def main():
     if not TOKEN:
-        print("Error: BOT_TOKEN environment variable not set")
+        print("Error: BOT_TOKEN not set in environment!")
+        return
+    if not ELEVENLABS_API_KEY:
+        print("Error: ELEVENLABS_API_KEY not set! Get it from elevenlabs.io")
         return
 
     app = ApplicationBuilder().token(TOKEN).build()
@@ -153,7 +162,7 @@ def main():
     app.add_handler(CallbackQueryHandler(button))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, get_text))
 
-    print("Bot is running...")
+    print("Reels King Bot starting...")
     app.run_polling(allowed_updates=Update.ALL_TYPES)
 
 
